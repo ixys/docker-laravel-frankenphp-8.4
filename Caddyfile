@@ -1,0 +1,68 @@
+# FrankenPHP Caddyfile for Laravel 11
+# Optimized for Octane workers and production performance
+
+{
+    # Global options
+    frankenphp {
+        # Number of workers for Laravel Octane
+        # Adjust based on available CPU cores
+        num_workers {$FRANKENPHP_NUM_WORKERS:4}
+    }
+    
+    # Production settings
+    admin off
+    
+    # Log to stderr for Kubernetes compatibility
+    log {
+        output stderr
+        format json
+        level {$LOG_LEVEL:INFO}
+    }
+}
+
+# Default server block
+{$SERVER_NAME:localhost} {
+    # Root directory
+    root * /app/public
+    
+    # Enable compression
+    encode gzip zstd
+    
+    # Security headers
+    header {
+        # Remove server header
+        -Server
+        # Security headers
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        # HSTS for production (uncomment if using HTTPS)
+        # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+    
+    # Health check endpoint for Kubernetes
+    handle /up {
+        respond "OK" 200
+    }
+    
+    # PHP files handling with FrankenPHP
+    php_server {
+        # Resolve symlinks for Laravel storage
+        resolve_root_symlink
+    }
+    
+    # Static file handling with caching
+    @static {
+        path *.css *.js *.ico *.gif *.jpg *.jpeg *.png *.svg *.woff *.woff2 *.ttf *.eot
+    }
+    handle @static {
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+    
+    # Log access for debugging (disable in production if needed)
+    log {
+        output stderr
+        format json
+    }
+}

@@ -1,0 +1,79 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+.docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+circle.yml
+azure-pipelines.yml
+
+# IDE
+.idea
+.vscode
+.vs
+*.swp
+*.swo
+*~
+.DS_Store
+.editorconfig
+
+# Documentation
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+*.md
+docs/
+
+# Tests
+tests/
+phpunit.xml
+phpunit.xml.dist
+.phpunit.result.cache
+coverage/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Laravel
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+!storage/framework/.gitkeep
+!storage/logs/.gitkeep
+bootstrap/cache/*
+!bootstrap/cache/.gitkeep
+.env
+.env.*
+!.env.example
+
+# Vendor (installed by composer in image)
+vendor/
+
+# Public built assets (built in image)
+public/build/
+public/hot
+public/storage
+
+# Development
+.phpunit.result.cache
+.php-cs-fixer.cache
+.php-cs-fixer.php
+.php_cs
+.php_cs.dist
+phpcs.xml
+phpmd.xml
+psalm.xml
+phpstan.neon
