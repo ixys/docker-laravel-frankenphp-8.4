@@ -1,9 +1,17 @@
+# syntax=docker/dockerfile:1.4
 # ===================================
-# BASE RUNTIME IMAGE
+# BASE RUNTIME IMAGE - Multi-Architecture
 # ===================================
 # This stage contains all system dependencies and PHP extensions
 # It rarely changes, maximizing Docker cache efficiency in CI/CD
-FROM dunglas/frankenphp:1-php8.4-bookworm AS base-runtime
+# Supports: linux/amd64, linux/arm64
+FROM --platform=$BUILDPLATFORM dunglas/frankenphp:1-php8.4-bookworm AS base-runtime
+
+# Build arguments for multi-arch support
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 # Set working directory
 WORKDIR /app
@@ -38,6 +46,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install and configure PHP extensions
 # Each extension is installed separately for clarity and debugging
+# Multi-arch compatible: works on both amd64 and arm64
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     pdo_mysql \
@@ -50,6 +59,10 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     intl \
     zip \
     opcache
+
+# Display architecture information for debugging
+RUN echo "Building for architecture: $(uname -m)" \
+    && echo "Platform: ${TARGETPLATFORM:-unknown}"
 
 # Install Redis extension via PECL
 RUN pecl install redis \
@@ -122,11 +135,15 @@ RUN composer install \
     && rm -rf /root/.composer
 
 # ===================================
-# FRONTEND BUILD STAGE
+# FRONTEND BUILD STAGE - Multi-Architecture
 # ===================================
 # This stage builds frontend assets in parallel
 # Completely isolated from PHP for maximum cache efficiency
-FROM node:20-bookworm-slim AS frontend-builder
+# Supports: linux/amd64, linux/arm64
+FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend-builder
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 WORKDIR /app
 

@@ -5,6 +5,7 @@ Production-ready Docker setup for Laravel 11 with FrankenPHP 8.4, optimized for 
 ## 🎯 Features
 
 - **Base Runtime Image**: Reusable base image with all system dependencies and PHP extensions
+- **Multi-Architecture Support**: Native support for linux/amd64 and linux/arm64 (Apple Silicon, AWS Graviton)
 - **Optimized Layer Caching**: Strategic layer ordering maximizes Docker cache hits
 - **Laravel 11 Ready**: Pre-configured for Laravel 11 with PHP 8.4
 - **Production OPcache**: Optimized OPcache settings with JIT compilation
@@ -58,6 +59,14 @@ docker build --target base-runtime -t my-app-base:latest .
 
 # Build final production image
 docker build --target app -t my-app:latest .
+
+# Or build for multiple architectures (amd64 + arm64)
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --target app \
+  -t my-app:latest \
+  --load \
+  .
 
 # Run production container
 docker run -d \
@@ -500,6 +509,23 @@ docker build --target dev -t my-app-dev .
 docker build --target app -t my-app .
 ```
 
+### Multi-Architecture Builds
+
+Build for both AMD64 (Intel/AMD) and ARM64 (Apple Silicon, AWS Graviton):
+
+```bash
+# Setup buildx (first time only)
+make setup-buildx
+
+# Build for multiple architectures
+make build-multiarch
+
+# Push multi-arch image to registry
+make push-multiarch REGISTRY=ghcr.io/your-org
+```
+
+See [MULTIARCH.md](MULTIARCH.md) for detailed multi-architecture documentation.
+
 ## 🐛 Troubleshooting
 
 ### OPcache Not Working
@@ -553,10 +579,17 @@ Contributions are welcome! Please ensure:
 - [Laravel 11 Documentation](https://laravel.com/docs/11.x)
 - [Laravel Octane Documentation](https://laravel.com/docs/11.x/octane)
 - [Docker Best Practices](https://docs.docker.com/develop/dev-best-practices/)
+- [Docker Buildx Multi-Platform](https://docs.docker.com/build/building/multi-platform/)
 - [Doppler Documentation](https://docs.doppler.com/)
+- [AWS Graviton](https://aws.amazon.com/ec2/graviton/)
 
 ## 📈 Version History
 
+- **v1.1.0** - Multi-architecture support
+  - Added linux/amd64 and linux/arm64 support
+  - Apple Silicon native performance
+  - AWS Graviton compatibility
+  - Updated CI/CD for multi-arch builds
 - **v1.0.0** - Initial release with optimized multi-stage build
   - FrankenPHP 1 with PHP 8.4
   - Laravel 11 support

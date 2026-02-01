@@ -1,9 +1,10 @@
-.PHONY: help build build-dev build-base push dev up down logs shell composer artisan test clean
+.PHONY: help build build-dev build-base push dev up down logs shell composer artisan test clean build-multiarch push-multiarch
 
 # Variables
 IMAGE_NAME ?= laravel-frankenphp
 IMAGE_TAG ?= latest
 REGISTRY ?= ghcr.io/your-org
+PLATFORMS ?= linux/amd64,linux/arm64
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -21,6 +22,38 @@ build-base: ## Build base runtime image (for CI/CD caching)
 	docker build --target base-runtime -t $(IMAGE_NAME):base .
 
 build-all: build-base build ## Build all images
+
+build-multiarch: ## Build multi-architecture image (amd64 + arm64)
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--target app \
+		-t $(IMAGE_NAME):$(IMAGE_TAG) \
+		--load \
+		.
+
+build-multiarch-base: ## Build multi-architecture base runtime
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--target base-runtime \
+		-t $(IMAGE_NAME):base \
+		--load \
+		.
+
+push-multiarch: ## Build and push multi-architecture image to registry
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--target app \
+		-t $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) \
+		--push \
+		.
+
+push-multiarch-base: ## Build and push multi-architecture base runtime
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--target base-runtime \
+		-t $(REGISTRY)/$(IMAGE_NAME):base \
+		--push \
+		.
 
 push: ## Push images to registry
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
@@ -136,6 +169,29 @@ ci-build: ## Build images for CI/CD with cache
 		-t $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) \
 		--push \
 		.
+
+ci-build-multiarch: ## Build multi-arch images for CI/CD with cache
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--target base-runtime \
+		--cache-from type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):base \
+		--cache-to type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):base,mode=max \
+		-t $(REGISTRY)/$(IMAGE_NAME):base \
+		--push \
+		.
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--target app \
+		--cache-from type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):base \
+		--cache-from type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) \
+		--cache-to type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG),mode=max \
+		-t $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) \
+		--push \
+		.
+
+setup-buildx: ## Setup Docker Buildx for multi-architecture builds
+	docker buildx create --name laravel-builder --use --bootstrap || true
+	docker buildx inspect laravel-builder
 
 ci-test: ## Run CI tests
 	docker-compose -f docker-compose.yml -f docker-compose.ci.yml run --rm app php artisan test
