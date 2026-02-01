@@ -664,6 +664,16 @@ Contributions are welcome! Please ensure:
 - [Doppler Documentation](https://docs.doppler.com/)
 - [AWS Graviton](https://aws.amazon.com/ec2/graviton/)
 
+## 📚 Additional Documentation
+
+- [WORKFLOW_DUAL_REGISTRY.md](WORKFLOW_DUAL_REGISTRY.md) - Complete guide for Scaleway + GHCR workflow
+- [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) - Practical examples for Docker Compose, Kubernetes, AWS, etc.
+- [MULTIARCH.md](MULTIARCH.md) - Multi-architecture deep dive
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Visual diagrams and flows
+- [DOCKER_OPTIMIZATION.md](DOCKER_OPTIMIZATION.md) - Technical optimization details
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Maintenance and contribution guide
+- [SUMMARY.md](SUMMARY.md) - Complete project overview
+
 ## 📈 Version History
 
 - **v1.1.0** - Multi-architecture support
