@@ -241,3 +241,34 @@ USER www-data
 EXPOSE 80 443
 
 CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+
+# ===================================
+# SLIM IMAGE (minimal production)
+# ===================================
+# Optimized minimal image without dev tools
+# Based on app stage but removes unnecessary packages
+FROM app AS slim
+
+# Switch to root to remove packages
+USER root
+
+# Remove development and optional packages to minimize image size
+RUN apt-get purge -y --auto-remove \
+    git \
+    vim \
+    nano \
+    curl \
+    # Keep only essential runtime libraries
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    /tmp/* \
+    /var/tmp/*
+
+# Remove Doppler CLI if not needed in slim variant
+RUN apt-get purge -y --auto-remove doppler || true
+
+# Switch back to www-data
+USER www-data
+
+# Slim image uses same entrypoint and configuration
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]

@@ -6,6 +6,8 @@ Production-ready Docker setup for Laravel 11 with FrankenPHP 8.4, optimized for 
 
 - **Base Runtime Image**: Reusable base image with all system dependencies and PHP extensions
 - **Multi-Architecture Support**: Native support for linux/amd64 and linux/arm64 (Apple Silicon, AWS Graviton)
+- **Dual Registry Support**: Push to Scaleway Container Registry and GitHub Container Registry (GHCR)
+- **Full & Slim Variants**: Standard production image and minimized slim variant
 - **Optimized Layer Caching**: Strategic layer ordering maximizes Docker cache hits
 - **Laravel 11 Ready**: Pre-configured for Laravel 11 with PHP 8.4
 - **Production OPcache**: Optimized OPcache settings with JIT compilation
@@ -507,7 +509,27 @@ docker build --target dev -t my-app-dev .
 
 # Production image (default)
 docker build --target app -t my-app .
+
+# Slim production image (minimal, without dev tools)
+docker build --target slim -t my-app-slim .
 ```
+
+### Image Variants
+
+**Full Image (`app` target):**
+- Complete production setup with all tools
+- Includes git, curl, and development utilities
+- Doppler CLI for secrets management
+- Recommended for most production use cases
+- Size: ~800MB
+
+**Slim Image (`slim` target):**
+- Minimized production image
+- Removes git, curl, vim, nano, and other dev tools
+- Removes Doppler CLI (use K8S secrets instead)
+- Optimized for environments with strict size constraints
+- Size: ~650MB (20% smaller)
+- Use when: deploying to edge locations, bandwidth-constrained, or security-hardened environments
 
 ### Multi-Architecture Builds
 
@@ -525,6 +547,65 @@ make push-multiarch REGISTRY=ghcr.io/your-org
 ```
 
 See [MULTIARCH.md](MULTIARCH.md) for detailed multi-architecture documentation.
+
+## 🔄 CI/CD with Dual Registry Support
+
+The project includes a GitHub Actions workflow (`docker-build.yml`) that automatically builds and pushes images to both:
+- **Scaleway Container Registry** (`rg.fr-par.scw.cloud/registry-ixys-dev`)
+- **GitHub Container Registry** (`ghcr.io`)
+
+### Workflow Behavior
+
+**Build triggers:**
+- Push to `main`, `develop`, or `feature/*` branches
+- Pull requests to `main` or `develop`
+- Release published
+- Manual workflow dispatch
+
+**Push behavior:**
+- ✅ **Pushes to registries:** Push to `main` or `develop`, or release published
+- ❌ **Build only (no push):** Pull requests or feature branches
+
+### Image Tags
+
+For each build, the following tags are created:
+
+**Full image:**
+- `{branch}_{sha}` - Specific build (e.g., `main_abc1234`)
+- `{branch}` - Latest for branch (e.g., `main`, `develop`)
+- `latest` - Latest on main branch
+- `{version}` - Release tag (e.g., `v1.2.3`) - only on release events
+
+**Slim image:**
+- `{branch}_{sha}-slim`
+- `{branch}-slim`
+- `slim` - Latest slim on main branch
+- `{version}-slim` - Release slim tag
+
+### Required Secrets
+
+Configure these secrets in your GitHub repository:
+
+```
+SCW_REGISTRY_PASSWORD - Scaleway Container Registry password
+GITHUB_TOKEN - Automatically provided by GitHub Actions
+```
+
+### Example Usage
+
+```bash
+# Pull from GHCR
+docker pull ghcr.io/your-org/your-app:latest
+docker pull ghcr.io/your-org/your-app:slim
+
+# Pull from Scaleway
+docker pull rg.fr-par.scw.cloud/registry-ixys-dev/your-app:latest
+docker pull rg.fr-par.scw.cloud/registry-ixys-dev/your-app:slim
+
+# Pull specific version
+docker pull ghcr.io/your-org/your-app:v1.2.3
+docker pull ghcr.io/your-org/your-app:v1.2.3-slim
+```
 
 ## 🐛 Troubleshooting
 
