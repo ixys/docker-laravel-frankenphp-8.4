@@ -1,0 +1,249 @@
+name: Build & Push Docker (Scaleway + GHCR)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/*'
+  pull_request:
+    branches:
+      - main
+      - develop
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: ${{ github.event.repository.name }}
+      REGISTRY_SCW: rg.fr-par.scw.cloud/registry-ixys-dev
+      REGISTRY_GHCR: ghcr.io/${{ github.repository_owner }}
+
+      # On ne push que :
+      # - sur push vers main ou develop
+      # - sur release publiée
+      PUSH_IMAGES: ${{ (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')) || (github.event_name == 'release' && github.event.action == 'published') }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------------------------
+      # LOGIN SCW (uniquement si push)
+      # ---------------------------
+      - name: Log in to Scaleway Container Registry
+        if: env.PUSH_IMAGES == 'true'
+        run: |
+          echo "${{ secrets.SCW_REGISTRY_PASSWORD }}" \
+            | docker login $REGISTRY_SCW -u "nologin" --password-stdin
+
+      # ---------------------------
+      # LOGIN GHCR (uniquement si push)
+      # ---------------------------
+      - name: Log in to GHCR
+        if: env.PUSH_IMAGES == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build, test and optionally push Docker images (full + slim)
+        env:
+          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_SHA: ${{ github.sha }}
+          PUSH_IMAGES: ${{ env.PUSH_IMAGES }}
+          # utile sur event release, vide sinon
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Ref:   $GIT_BRANCH"
+          echo "Will push images? $PUSH_IMAGES"
+
+          # ---------------------------
+          # Slug branch / tag
+          # (sur release, GIT_BRANCH = tag, ex: v1.2.3)
+          # ---------------------------
+          BRANCH_SLUG=$(echo "$GIT_BRANCH" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed 's/[^a-z0-9_.-]/-/g')
+
+          echo "Branch slug: $BRANCH_SLUG"
+          echo "Commit SHA:  $GIT_SHA"
+
+          # ---------------------------
+          # Base images
+          # ---------------------------
+          IMAGE_SCW="$REGISTRY_SCW/$IMAGE_NAME"
+          IMAGE_GHCR="$REGISTRY_GHCR/$IMAGE_NAME"
+
+          # ---------------------------
+          # TAGGING COMMON
+          # ---------------------------
+          # FULL
+          TAG_FULL_SCW_BUILD="${IMAGE_SCW}:${BRANCH_SLUG}_${GIT_SHA}"
+          TAG_FULL_SCW_BRANCH="${IMAGE_SCW}:${BRANCH_SLUG}"
+          TAG_FULL_SCW_LATEST="${IMAGE_SCW}:latest"
+
+          TAG_FULL_GHCR_BUILD="${IMAGE_GHCR}:${BRANCH_SLUG}_${GIT_SHA}"
+          TAG_FULL_GHCR_BRANCH="${IMAGE_GHCR}:${BRANCH_SLUG}"
+          TAG_FULL_GHCR_LATEST="${IMAGE_GHCR}:latest"
+
+          # SLIM
+          TAG_SLIM_SCW_BUILD="${IMAGE_SCW}:${BRANCH_SLUG}_${GIT_SHA}-slim"
+          TAG_SLIM_SCW_BRANCH="${IMAGE_SCW}:${BRANCH_SLUG}-slim"
+          TAG_SLIM_SCW_LATEST="${IMAGE_SCW}:slim"
+
+          TAG_SLIM_GHCR_BUILD="${IMAGE_GHCR}:${BRANCH_SLUG}_${GIT_SHA}-slim"
+          TAG_SLIM_GHCR_BRANCH="${IMAGE_GHCR}:${BRANCH_SLUG}-slim"
+          TAG_SLIM_GHCR_LATEST="${IMAGE_GHCR}:slim"
+
+          # Optionnel : tag spécifique release si on est sur un event release
+          if [ -n "${RELEASE_TAG:-}" ]; then
+            TAG_FULL_SCW_RELEASE="${IMAGE_SCW}:${RELEASE_TAG}"
+            TAG_FULL_GHCR_RELEASE="${IMAGE_GHCR}:${RELEASE_TAG}"
+            TAG_SLIM_SCW_RELEASE="${IMAGE_SCW}:${RELEASE_TAG}-slim"
+            TAG_SLIM_GHCR_RELEASE="${IMAGE_GHCR}:${RELEASE_TAG}-slim"
+          fi
+
+          # ---------------------------
+          # Optional cache (pour single-arch amd64 seulement)
+          # ---------------------------
+          docker pull "$TAG_FULL_SCW_LATEST" 2>/dev/null || true
+          docker pull "$TAG_FULL_GHCR_LATEST" 2>/dev/null || true
+          docker pull "$TAG_SLIM_SCW_LATEST" 2>/dev/null || true
+          docker pull "$TAG_SLIM_GHCR_LATEST" 2>/dev/null || true
+
+          # ---------------------------
+          # BUILD FULL (multi-arch)
+          # ---------------------------
+          echo "Building FULL image (multi-arch: amd64, arm64)..."
+          docker buildx build --pull \
+            --platform linux/amd64,linux/arm64 \
+            --cache-from "$TAG_FULL_SCW_LATEST" \
+            --cache-from "$TAG_FULL_GHCR_LATEST" \
+            --target app \
+            -t "$TAG_FULL_SCW_BUILD" \
+            -t "$TAG_FULL_SCW_BRANCH" \
+            -t "$TAG_FULL_SCW_LATEST" \
+            -t "$TAG_FULL_GHCR_BUILD" \
+            -t "$TAG_FULL_GHCR_BRANCH" \
+            -t "$TAG_FULL_GHCR_LATEST" \
+            ${TAG_FULL_SCW_RELEASE:+-t "$TAG_FULL_SCW_RELEASE"} \
+            ${TAG_FULL_GHCR_RELEASE:+-t "$TAG_FULL_GHCR_RELEASE"} \
+            --push="${PUSH_IMAGES}" \
+            -f Dockerfile .
+
+          # ---------------------------
+          # BUILD SLIM (multi-arch)
+          # ---------------------------
+          echo "Building SLIM image (multi-arch: amd64, arm64)..."
+          docker buildx build --pull \
+            --platform linux/amd64,linux/arm64 \
+            --cache-from "$TAG_SLIM_SCW_LATEST" \
+            --cache-from "$TAG_SLIM_GHCR_LATEST" \
+            --target slim \
+            -t "$TAG_SLIM_SCW_BUILD" \
+            -t "$TAG_SLIM_SCW_BRANCH" \
+            -t "$TAG_SLIM_SCW_LATEST" \
+            -t "$TAG_SLIM_GHCR_BUILD" \
+            -t "$TAG_SLIM_GHCR_BRANCH" \
+            -t "$TAG_SLIM_GHCR_LATEST" \
+            ${TAG_SLIM_SCW_RELEASE:+-t "$TAG_SLIM_SCW_RELEASE"} \
+            ${TAG_SLIM_GHCR_RELEASE:+-t "$TAG_SLIM_GHCR_RELEASE"} \
+            --push="${PUSH_IMAGES}" \
+            -f Dockerfile .
+
+          # ============================================================
+          # TESTS SUR L'IMAGE FULL (image locale amd64 pour tests)
+          # ============================================================
+          echo "Building FULL image for local testing (amd64 only)..."
+          docker buildx build \
+            --platform linux/amd64 \
+            --target app \
+            -t test-full:local \
+            --load \
+            -f Dockerfile .
+
+          echo "Checking PHP version on FULL image..."
+          docker run --rm test-full:local php -v
+
+          echo "Checking required PHP extensions on FULL image..."
+          docker run --rm test-full:local php -m | grep -E 'bcmath|gd|intl|mbstring|pcntl|pdo_mysql|zip|redis|opcache'
+
+          echo "Checking FrankenPHP binary..."
+          docker run --rm test-full:local frankenphp version
+
+          echo "Testing health check endpoint on FULL image..."
+          FULL_CONTAINER_NAME="test-full-${BRANCH_SLUG}"
+          docker rm -f "$FULL_CONTAINER_NAME" >/dev/null 2>&1 || true
+          docker run -d --name "$FULL_CONTAINER_NAME" -p 8080:80 test-full:local
+          sleep 10
+          curl -f http://localhost:8080/up || (docker logs "$FULL_CONTAINER_NAME" && exit 1)
+          echo "Health check passed!"
+          docker rm -f "$FULL_CONTAINER_NAME"
+
+          # ============================================================
+          # TESTS SUR L'IMAGE SLIM (image locale amd64 pour tests)
+          # ============================================================
+          echo "Building SLIM image for local testing (amd64 only)..."
+          docker buildx build \
+            --platform linux/amd64 \
+            --target slim \
+            -t test-slim:local \
+            --load \
+            -f Dockerfile .
+
+          echo "Checking PHP version on SLIM image..."
+          docker run --rm test-slim:local php -v
+
+          echo "Testing health check endpoint on SLIM image..."
+          SLIM_CONTAINER_NAME="test-slim-${BRANCH_SLUG}"
+          docker rm -f "$SLIM_CONTAINER_NAME" >/dev/null 2>&1 || true
+          docker run -d --name "$SLIM_CONTAINER_NAME" -p 8081:80 test-slim:local
+          sleep 10
+          curl -f http://localhost:8081/up || (docker logs "$SLIM_CONTAINER_NAME" && exit 1)
+          echo "Health check passed!"
+          docker rm -f "$SLIM_CONTAINER_NAME"
+
+          # ---------------------------
+          # Summary
+          # ---------------------------
+          echo ""
+          echo "======================================"
+          echo "Build Summary"
+          echo "======================================"
+          echo "Event:        $GITHUB_EVENT_NAME"
+          echo "Branch:       $GIT_BRANCH (slug: $BRANCH_SLUG)"
+          echo "Commit SHA:   $GIT_SHA"
+          echo "Images pushed: $PUSH_IMAGES"
+          if [ "$PUSH_IMAGES" = "true" ]; then
+            echo ""
+            echo "Images pushed to:"
+            echo "  - Scaleway:  $IMAGE_SCW"
+            echo "  - GHCR:      $IMAGE_GHCR"
+            echo ""
+            echo "Tags:"
+            echo "  Full: ${BRANCH_SLUG}, ${BRANCH_SLUG}_${GIT_SHA}, latest"
+            echo "  Slim: ${BRANCH_SLUG}-slim, ${BRANCH_SLUG}_${GIT_SHA}-slim, slim"
+            if [ -n "${RELEASE_TAG:-}" ]; then
+              echo "  Release: ${RELEASE_TAG}, ${RELEASE_TAG}-slim"
+            fi
+          else
+            echo ""
+            echo "Images built but NOT pushed (PR or feature branch)"
+          fi
+          echo "======================================"

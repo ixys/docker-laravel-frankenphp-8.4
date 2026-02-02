@@ -1,0 +1,9 @@
+{
+    "name": "laravel-frankenphp",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "echo 'Build complete' && mkdir -p public/build && echo '{}' > public/build/manifest.json"
+    },
+    "devDependencies": {}
+}

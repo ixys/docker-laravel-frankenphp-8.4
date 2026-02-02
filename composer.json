@@ -1,0 +1,13 @@
+{
+    "name": "laravel/laravel",
+    "type": "project",
+    "description": "Laravel FrankenPHP Docker Setup",
+    "require": {
+        "php": "^8.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}
