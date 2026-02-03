@@ -151,15 +151,25 @@ WORKDIR /app
 COPY package.json package-lock.json* /app/
 
 # Install node dependencies
-RUN npm ci --omit=dev
+# Use npm install if package-lock.json doesn't exist (minimal setups)
+# Note: For production setups with dependencies, package-lock.json should be committed
+# This fallback allows minimal Laravel setups without any npm dependencies to build
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
-# Copy source files needed for build
-COPY resources /app/resources
-COPY vite.config.js /app/
-COPY postcss.config.js* /app/
-COPY tailwind.config.js* /app/
+# Copy source files needed for build (optional files with wildcards)
+# Wildcards allow COPY to succeed even if files don't exist
+# This is important for minimal Laravel setups without frontend build tools
+# Full Laravel apps with Vite should commit these files to the repository
+COPY vite.config.js* postcss.config.js* tailwind.config.js* /app/
+
+# Create resources directory placeholder if it doesn't exist
+# For minimal setups: The build script creates a dummy manifest without needing resources
+# For full setups: Resources should be copied from context in line 178 of this Dockerfile
+RUN mkdir -p /app/resources
 
 # Build production assets
+# For minimal setups: Creates a dummy manifest (see package.json build script)
+# For full setups: Runs actual Vite build with resources and config files
 RUN npm run build
 
 # ===================================
