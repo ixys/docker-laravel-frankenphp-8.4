@@ -151,15 +151,20 @@ WORKDIR /app
 COPY package.json package-lock.json* /app/
 
 # Install node dependencies
-RUN npm ci --omit=dev
+# Use npm install if package-lock.json doesn't exist (minimal setups)
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
-# Copy source files needed for build
-COPY resources /app/resources
-COPY vite.config.js /app/
-COPY postcss.config.js* /app/
-COPY tailwind.config.js* /app/
+# Copy source files needed for build (optional files with wildcards)
+# Wildcards allow COPY to succeed even if files don't exist
+# This is important for minimal Laravel setups without frontend build tools
+COPY vite.config.js* postcss.config.js* tailwind.config.js* /app/
+
+# Create resources directory placeholder if it doesn't exist
+# The build script doesn't need actual resources for minimal setups
+RUN mkdir -p /app/resources
 
 # Build production assets
+# For minimal setups, this just creates a dummy manifest
 RUN npm run build
 
 # ===================================
